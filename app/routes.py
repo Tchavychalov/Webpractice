@@ -1,8 +1,11 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from fastapi.responses import JSONResponse
-from .models import MLRequest, new_token
-from .services import FileService, NNService
-from .dependencies import get_fileservice, get_nnservice
+from .models import MLRequest
+from .services.task_service import TaskAddService, TaskResultService, NotEnoughBalanceError, TaskNotDoneError, TaskNotFoundError
+from .services.nn_service import NNService
+from .services.balance_service import FileBalance
+from .services.file_service import FileService
+from .dependencies import get_file_service, get_nn_service, get_balance_service
 
 router = APIRouter()
 
@@ -13,60 +16,41 @@ async def healthcheck():
 
 # Проверка работы нейронной сети
 @router.get("/healthcheck/ml")
-async def healthcheck_ml(nnservice: NNService = Depends(get_nnservice)):
-    try:
-        await nnservice.run_nn("test")
+async def healthcheck_ml(nn_service: NNService = Depends(get_nn_service)):
+    if await nn_service.healthcheck_ml_service():
         return JSONResponse(status_code=200, content={"status":"ANN ready"})
-    except Exception:
+    else:
         raise HTTPException(status_code=503, detail="ANN error")
+        
 
 # Обработка добавления запроса к нейронной сети
 @router.post('/task/add')
 async def add_req(
                 request: MLRequest, 
                 backgroud: BackgroundTasks, 
-                fileservice: FileService = Depends(get_fileservice), 
-                nnservice: NNService = Depends(get_nnservice),
-                ):
-    # Имя файла с балансом
-    balance_filename = f'{request.token}_balance.txt'
-    # Проверка существования файла и запись начального баланса
-    if not fileservice.file_exists(balance_filename):
-        await fileservice.set_file_content(balance_filename, "100")
-    # Проверка текущего значение баланса
-    current_balance = int(await fileservice.get_file_content(balance_filename))
-    if current_balance <= 10:
-        raise HTTPException(status_code=402, detail="Balance error")
-    # Создание id задачи
-    req_id = new_token(4)
-    wait_filename = f"{request.token}_{req_id}_wait.txt"
-    # Запись файла с суффиксом wait
-    await fileservice.set_file_content(wait_filename, request.query)
-    # Добавление задачи
-    backgroud.add_task(req_process, request.token, req_id, request.query, fileservice, nnservice)
-    # Уменьшение баланса
-    await fileservice.balance_dec(balance_filename)
-    # Вернуть id задачи
-    return JSONResponse(status_code=200, content={"id": req_id})
-#Обработка запроса в нейронной сети
-async def req_process(token: str, id: str, query: str, fileservice: FileService = Depends(get_fileservice), nnservice: NNService = Depends(get_nnservice)):
-    result = await nnservice.run_nn(query)
-    wait_filename = f"{token}_{id}_wait.txt"
-    done_filename = f"{token}_{id}_ready.txt"
-    await fileservice.set_file_content(done_filename, result)
-    if fileservice.file_exists(wait_filename):
-        fileservice.delete_file(wait_filename)
+                balance_service: FileBalance = Depends(get_balance_service), 
+                nn_service: NNService = Depends(get_nn_service),
+                file_service: FileService = Depends(get_file_service),
+                ) -> dict:
+    try:
+        task_service = TaskAddService(balance_service, nn_service, file_service)
+        req_id = await task_service.add_task(request, backgroud)
+        return {'req_id': req_id}
+    except NotEnoughBalanceError as neb:
+        raise HTTPException(status_code=402, detail=str(neb))
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=str(ex))
 
 # Результаты
 @router.get("/task/result")
-async def get_result(token: str, id: str, fileservice: FileService = Depends(get_fileservice)):
-    wait_filename = f"{token}_{id}_wait.txt"
-    done_filename = f"{token}_{id}_ready.txt"
-
-    if fileservice.file_exists(done_filename):
-        result = await fileservice.get_file_content(done_filename)
-        return JSONResponse(status_code=200, content={"result":result})
-    elif fileservice.file_exists(wait_filename):
-        return JSONResponse(status_code=204, content={"message":"Process not complete"})
-    else:
-        return HTTPException(status_code=404, delail="ID not found")
+async def get_result(token: str, id: str, file_service: FileService = Depends(get_file_service), nn_service: NNService = Depends(get_nn_service),) -> dict:
+    try:
+        task_result_service = TaskResultService(file_service, nn_service)
+        result = await task_result_service.get_result(token, id)
+        return result
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Задача с такими ID не найдена")
+    except TaskNotDoneError:
+        raise HTTPException(status_code=204, detail="Задача еще не выполнена")
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=str(ex))

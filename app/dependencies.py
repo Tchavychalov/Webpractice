@@ -1,10 +1,12 @@
-from .services import FileService, NNService
+from .services.file_service import FileService
+from .services.nn_service import NNService
+from .services.balance_service import FileBalance
 
-file_service = FileService()
-nn_service = NNService()
+def get_file_service() -> FileService:
+    return FileService()
 
-def get_fileservice():
-    return file_service
+def get_nn_service() -> NNService:
+    return NNService()
 
-def get_nnservice():
-    return nn_service
+def get_balance_service(token: str) -> FileBalance:
+    return FileBalance(token)
