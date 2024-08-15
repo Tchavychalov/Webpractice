@@ -4,12 +4,13 @@ from .routes import router
 from .config import load_config
 
 config_file = "config.yaml"
-path = "app\\"
-
+path = "app"
 config = load_config(os.path.join(path, config_file))
 
 app = FastAPI()
 app.include_router(router)
+
+
 
 if __name__ == "__main__":
     import uvicorn
