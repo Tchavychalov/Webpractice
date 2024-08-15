@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI
 from .routes import router
-from .config import load_config
+from .config.config import load_config
 
 config_file = "config.yaml"
 path = "app"

@@ -1,6 +1,6 @@
 import yaml
 from pydantic import ValidationError
-from .server_model import AppConfig
+from ..server_model import AppConfig
 
 def load_config(path: str) -> AppConfig:
     try:
