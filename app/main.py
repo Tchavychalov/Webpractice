@@ -4,7 +4,7 @@ from .routes import router
 from .config.config import load_config
 
 config_file = "config.yaml"
-path = "app"
+path = "app\config"
 config = load_config(os.path.join(path, config_file))
 
 app = FastAPI()
