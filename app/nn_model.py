@@ -1,10 +1,9 @@
 import torch
-from transformers import AutoModelForSequenceClassification
-from transformers import BertTokenizerFast
+from transformers import AutoModelForSequenceClassification, BertTokenizerFast
 
-tokenizer = BertTokenizerFast.from_pretrained('blanchefort/rubert-base-cased-sentiment-med')
-model = AutoModelForSequenceClassification.from_pretrained('blanchefort/rubert-base-cased-sentiment-med', return_dict=True)
-
+# Указываем путь к локальным весам
+tokenizer = BertTokenizerFast.from_pretrained('./model/tokenizer')
+model = AutoModelForSequenceClassification.from_pretrained('./model')
 
 def predict(text: str) -> int:
     inputs = tokenizer(text, max_length=512, padding=True, truncation=True, return_tensors='pt')
